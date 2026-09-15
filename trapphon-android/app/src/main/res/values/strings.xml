@@ -1,0 +1,15 @@
+<resources>
+    <string name="app_name">SYTECH Tracking</string>
+    <string name="admin_label">SYTECH Device Protection Guard</string>
+    <string name="admin_description">Enables anti-theft honeypot lockdown, hardware SIM interception, and remote evidence generation for stolen device recovery in Botswana.</string>
+    
+    <!-- Honeypot Lockdown Strings (PRD Section 4.A) -->
+    <string name="honeypot_title">Security Lockdown</string>
+    <string name="honeypot_warning">Too many failed access attempts. Cellular network verification required. Please insert a valid SIM card to verify your identity.</string>
+    <string name="emergency_call_only">Emergency Calls Only</string>
+    <string name="carrier_verification_waiting">Awaiting valid carrier SIM authorization (Mascom / Orange / BTC)...</string>
+
+    <!-- Prominent Disclosure for Google Play Store Policy -->
+    <string name="prominent_disclosure_title">Device Protection &amp; Administrative Permissions</string>
+    <string name="prominent_disclosure_body">SYTECH Tracking requires Device Administrator permission to monitor failed lock screen attempts. If an unauthorized handler attempts to access this device and exceeds 3 consecutive failed PIN attempts, SYTECH initiates an offline security lockdown to prevent data theft and harvest recovery intelligence. Your personal data is encrypted and protected at all times pursuant to the Botswana Data Protection Act.</string>
+</resources>

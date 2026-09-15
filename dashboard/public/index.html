@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SYTECH DEVICE TRACKING - Intelligence Operations & Blurred Paywall</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <link rel="stylesheet" href="styles.css" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0f7ff',
+              100: '#e0effe',
+              500: '#0284c7',
+              600: '#0369a1',
+              700: '#075985',
+              800: '#0c4a6e',
+              900: '#082f49',
+            },
+            danger: {
+              500: '#ef4444',
+              600: '#dc2626',
+            },
+            bworange: '#ff6600', // Orange Botswana
+            bwmascom: '#ffcc00', // Mascom Yellow
+            bwbtc: '#008000',    // BTC Green
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased selection:bg-cyan-500 selection:text-white">
+<div class="p-3 bg-amber-950 text-amber-200 text-center">Prototype: identity results and payments are simulated. Receipts are unverified. Demo reports are not evidence.</div>
+
+  <!-- TOP HEADER -->
+  <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-600 to-blue-700 flex items-center justify-center shadow-lg shadow-cyan-500/20 cursor-pointer" id="headerLogo" title="Double-click / 5-tap for Master Exit">
+          <i class="fa-solid fa-shield-halved text-white text-lg"></i>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <span class="text-lg font-bold tracking-tight text-white">SYTECH <span class="text-cyan-400">TRACKING</span></span>
+            <span class="text-xs px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 font-mono">v4.0 DEMO</span>
+          </div>
+          <p class="text-xs text-slate-400">100% Non-Field Risk • Gaborone, Botswana Operations</p>
+        </div>
+      </div>
+
+      <!-- Live Connection & Market Status -->
+      <div class="flex items-center space-x-4">
+        <div class="hidden sm:flex items-center space-x-2 bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700 text-xs">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span class="text-slate-300">Hub: <b class="text-white">iTowers, CBD Gaborone</b></span>
+          <span class="text-slate-500">|</span>
+          <span class="text-slate-300">Carrier Gateways: <span class="text-amber-400 font-semibold">Orange • Mascom • BTC</span></span>
+        </div>
+        <button id="signOutBtn" onclick="signOut()" class="hidden px-3 py-2 rounded border border-slate-600 text-sm">Sign out</button>
+        <div class="flex items-center space-x-1 bg-cyan-950/60 border border-cyan-700/50 px-3 py-1.5 rounded-lg text-xs font-mono text-cyan-300" id="wsStatus">
+          <i class="fa-solid fa-wifi text-emerald-400"></i>
+          <span>SIGNED OUT</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div id="authenticatedWorkspace" class="hidden">
+  <!-- NAVIGATION TABS -->
+  <div class="bg-slate-900 border-b border-slate-800">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex space-x-2 overflow-x-auto py-2">
+      <button data-roles="customer,operator,admin" onclick="switchTab('paywall')" id="tab-btn-paywall" class="tab-btn active-tab flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all">
+        <i class="fa-solid fa-folder-open text-amber-400"></i>
+        <span>Case Resolution</span>
+      </button>
+      <button data-roles="operator,admin" onclick="switchTab('operator')" id="tab-btn-operator" class="tab-btn flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all">
+        <i class="fa-solid fa-satellite-dish text-cyan-400"></i>
+        <span>Operator Command Center</span>
+      </button>
+      <button data-roles="operator,admin" onclick="switchTab('technician')" id="tab-btn-technician" class="tab-btn flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all">
+        <i class="fa-solid fa-triangle-exclamation text-rose-400"></i>
+        <span>Technician Hub Detector</span>
+      </button>
+      <button data-roles="customer,operator,admin" onclick="switchTab('ocr')" id="tab-btn-ocr" class="tab-btn flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all">
+        <i class="fa-solid fa-receipt text-purple-400"></i>
+        <span>Register Device</span>
+      </button>
+      <button data-roles="admin" onclick="switchTab('simulator')" id="tab-btn-simulator" class="tab-btn flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all">
+        <i class="fa-solid fa-mobile-screen-button text-emerald-400"></i>
+        <span>Hardware Honeypot Simulator</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- MAIN CONTAINER -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+    <!-- Case workflow: this keeps the operator oriented before a sensitive action. -->
+    <section class="mb-6 rounded-2xl border border-slate-800 bg-slate-900/70 p-4 shadow-lg" aria-label="Case workflow">
+      <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p class="text-[11px] font-mono uppercase tracking-wider text-cyan-400">Active case workflow</p>
+          <p id="workflowSummary" class="mt-1 text-sm font-semibold text-white">Loading selected device…</p>
+        </div>
+        <ol class="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4" id="workflowSteps">
+          <li data-step="registered" class="workflow-step">1. Registered</li>
+          <li data-step="telemetry" class="workflow-step">2. Telemetry</li>
+          <li data-step="review" class="workflow-step">3. Review</li>
+          <li data-step="complete" class="workflow-step">4. Complete</li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- TAB 1: THE BLURRED PREVIEW INTERFACE & MONETIZATION PAYWALL -->
+    <!-- ========================================================================= -->
+    <section id="view-paywall" class="tab-content space-y-6">
+      
+      <!-- Device Selector & Banner -->
+      <div class="bg-gradient-to-r from-slate-900 to-slate-800 border border-slate-700/80 rounded-2xl p-5 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <div class="flex items-center space-x-3 mb-1">
+            <span id="caseStatusBadge" class="px-2.5 py-1 text-xs font-bold rounded-md uppercase tracking-wider bg-slate-800 text-slate-300 border border-slate-700 flex items-center gap-1.5">
+              <i class="fa-solid fa-circle-notch text-xs"></i> LOADING CASE
+            </span>
+            <span class="text-xs text-slate-400" id="deviceLastPing">Checking latest telemetry…</span>
+          </div>
+          <h1 class="text-2xl font-black text-white" id="selectedDeviceTitle">Samsung Galaxy S24 Ultra (IMEI: 359128091823901)</h1>
+          <p class="text-sm text-slate-400">Registered to: <b class="text-slate-200" id="selectedDeviceOwner">Loading…</b></p>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <select aria-label="Select device" id="deviceSelector" onchange="loadDevicePreview(this.value)" class="bg-slate-800 text-slate-200 text-sm rounded-lg px-3 py-2 border border-slate-600 focus:ring-2 focus:ring-cyan-500">
+            <!-- Populated dynamically -->
+          </select>
+          <button onclick="refreshCurrentDevice()" class="p-2.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white border border-slate-700 hover:bg-slate-700 transition">
+            <i class="fa-solid fa-arrows-rotate"></i>
+          </button>
+        </div>
+      </div>
+
+      <div id="emptyDeviceNotice" class="hidden p-6 rounded-xl border border-slate-700">No devices yet. <button onclick="switchTab('ocr')" class="text-cyan-300 underline">Register your first device</button></div>
+      <!-- MAIN PAYWALL BODY -->
+      <div id="caseBody" class="hidden grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- LEFT COLUMN: SUSPECT INTEL & BLURRED PREVIEW -->
+        <div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-6">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+            <div>
+              <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                <i class="fa-solid fa-fingerprint text-cyan-400"></i> Simulated case data
+              </h2>
+              <p class="text-xs text-slate-400">Demonstration values; no identity has been verified</p>
+            </div>
+            <div id="settlementBadge">
+              <span class="px-3 py-1 rounded-full text-xs font-semibold bg-amber-950 text-amber-300 border border-amber-800 flex items-center gap-1.5">
+                <i class="fa-solid fa-lock"></i> Evidence Obscured (Pending Settlement)
+              </span>
+            </div>
+          </div>
+
+          <!-- SUSPECT AVATAR & ATTRIBUTES CONTAINER -->
+          <div class="grid grid-cols-1 sm:grid-cols-12 gap-6 items-center">
+            <!-- Suspect Photo Card -->
+            <div class="sm:col-span-5 flex flex-col items-center">
+              <div class="relative w-44 h-44 rounded-2xl overflow-hidden border-2 border-slate-700 shadow-2xl group">
+                <img id="suspectPhotoImg" src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&fit=crop&q=80" alt="Suspect Capture" class="w-full h-full object-cover transition-all duration-700 filter blur-md scale-105" />
+                <div id="photoLockOverlay" class="absolute inset-0 bg-slate-950/50 backdrop-blur-sm flex flex-col items-center justify-center text-center p-3">
+                  <div class="w-10 h-10 rounded-full bg-slate-900/90 border border-slate-700 flex items-center justify-center mb-1 text-amber-400 shadow-lg">
+                    <i class="fa-solid fa-eye-slash"></i>
+                  </div>
+                  <span class="text-xs font-bold text-slate-200">FACIAL PROFILE LOCKED</span>
+                  <span class="text-[10px] text-slate-400">Sample image only</span>
+                </div>
+              </div>
+              <p class="text-xs text-slate-400 mt-2 text-center" id="faceMatchConfidence">Simulated match score: <b class="text-emerald-400">96.8% Confidence</b></p>
+            </div>
+
+            <!-- Suspect Data Points -->
+            <div class="sm:col-span-7 space-y-3">
+              <div class="bg-slate-950/60 p-3 rounded-xl border border-slate-800/80">
+                <span class="text-[11px] text-slate-500 uppercase tracking-wider block font-mono">KYC Legal Name (Mobile Money Lookup)</span>
+                <span id="suspectNameText" class="text-base font-bold text-amber-400 font-mono tracking-wide">Th*** M*****</span>
+              </div>
+
+              <div class="bg-slate-950/60 p-3 rounded-xl border border-slate-800/80">
+                <span class="text-[11px] text-slate-500 uppercase tracking-wider block font-mono">Intercepted Stolen SIM Phone Number</span>
+                <span id="suspectPhoneText" class="text-base font-bold text-cyan-300 font-mono">+267 71 **** 67</span>
+                <span class="text-xs text-slate-400 ml-2" id="suspectCarrierText">(Orange Botswana)</span>
+              </div>
+
+              <div class="bg-slate-950/60 p-3 rounded-xl border border-slate-800/80">
+                <span class="text-[11px] text-slate-500 uppercase tracking-wider block font-mono">Intercepted SIM IMSI (Serial)</span>
+                <span id="suspectImsiText" class="text-xs font-mono text-slate-300">652028912384910</span>
+              </div>
+
+              <div class="bg-slate-950/60 p-3 rounded-xl border border-slate-800/80">
+                <span class="text-[11px] text-slate-500 uppercase tracking-wider block font-mono">Surrounding Hardware Router MAC (BSSID)</span>
+                <span id="suspectBssidText" class="text-xs font-mono text-rose-400">A4:2B:B0:19:C2:5E [Gaborone Station Zone]</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- SOCIAL PROFILES & DIGITAL FOOTPRINT -->
+          <div class="border-t border-slate-800 pt-4">
+            <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <i class="fa-solid fa-globe text-blue-400"></i> Open-Source Digital Footprint (Scraped Social Media)
+            </h3>
+            <div id="socialLinksContainer" class="flex flex-wrap gap-2">
+              <span class="px-3 py-1.5 rounded-lg bg-slate-800 text-xs text-slate-400 border border-slate-700 flex items-center gap-2 filter blur-sm">
+                <i class="fa-brands fa-facebook text-blue-500"></i> https://facebook.com/thatayaone.motlhanka
+              </span>
+              <span class="px-3 py-1.5 rounded-lg bg-slate-800 text-xs text-slate-400 border border-slate-700 flex items-center gap-2 filter blur-sm">
+                <i class="fa-brands fa-instagram text-pink-500"></i> @dj_sparks_bw_official
+              </span>
+              <span class="text-xs text-amber-500/90 italic flex items-center gap-1 mt-1">
+                <i class="fa-solid fa-lock text-[10px]"></i> Unlocked upon settlement of Option A.
+              </span>
+            </div>
+          </div>
+
+          <!-- UNLOCKED POLICE DOSSIER DOWNLOAD BUTTON (Shows after settlement) -->
+          <div id="unlockedDossierBanner" class="hidden bg-emerald-950/70 border border-emerald-700 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div class="flex items-center space-x-3">
+              <div class="w-10 h-10 rounded-lg bg-emerald-600 flex items-center justify-center text-white text-lg">
+                <i class="fa-solid fa-file-shield"></i>
+              </div>
+              <div>
+                <h4 class="text-sm font-bold text-white">Demonstration report ready</h4>
+                <p class="text-xs text-emerald-300">Simulated data only. This report is not legal evidence or a police affidavit.</p>
+              </div>
+            </div>
+            <a id="downloadAffidavitBtn" href="#" target="_blank" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-semibold shadow-lg shadow-emerald-700/30 flex items-center gap-2 whitespace-nowrap transition">
+              <i class="fa-solid fa-download"></i> Download Demo PDF
+            </a>
+          </div>
+
+        </div>
+
+        <!-- RIGHT COLUMN: DUAL-TIER INVOICING & CONTINGENCY CHECKOUT -->
+        <div class="lg:col-span-5 space-y-6">
+
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-5">
+            <div>
+              
+              <h2 class="text-lg font-bold text-white">Select Resolution Tier</h2>
+              <p class="text-xs text-slate-400 mt-1">
+                Demo-only settlement flow. Review captured telemetry before choosing a resolution option.
+              </p>
+            </div>
+
+            <!-- Proof of Purchase Receipt Card -->
+            <div class="bg-slate-950/80 p-3.5 rounded-xl border border-slate-800 text-xs space-y-1">
+              <div class="flex justify-between text-slate-400">
+                <span>Receipt verification:</span>
+                <b class="text-slate-200" id="receiptStore">Orange Botswana Shop - Game City</b>
+              </div>
+              <div class="flex justify-between text-slate-400">
+                <span>Declared purchase price:</span>
+                <b class="text-slate-200" id="receiptPrice">BWP 8,000.00</b>
+              </div>
+              <div class="flex justify-between text-slate-400">
+                <span>Deferred Registration Fee Status:</span>
+                <b class="text-amber-400" id="regFeeStatus">P50.00 (Deferred - Pay Once)</b>
+              </div>
+            </div>
+
+            <!-- TIER OPTION A: FULL INTEL DOSSIER (25%) -->
+            <div onclick="selectPricingOption('full_intel_dossier')" id="card-option-a" class="pricing-card active-pricing-card border-2 border-cyan-500 bg-slate-950/90 rounded-xl p-4 cursor-pointer transition-all relative overflow-hidden">
+              <div class="absolute top-2 right-2">
+                <span class="px-2 py-0.5 text-[10px] font-bold bg-cyan-600 text-white rounded-full">POPULAR</span>
+              </div>
+              <div class="flex items-start space-x-3">
+                <div class="w-8 h-8 rounded-lg bg-cyan-950 border border-cyan-700 flex items-center justify-center text-cyan-400 mt-0.5">
+                  <i class="fa-solid fa-file-signature"></i>
+                </div>
+                <div class="flex-1">
+                  <div class="flex items-baseline justify-between">
+                    <h3 class="text-sm font-bold text-white">Option A: Full Intel Dossier</h3>
+                    <div class="text-right">
+                      <span class="text-lg font-extrabold text-cyan-400" id="optionATotalDisplay">BWP 2,050.00</span>
+                    </div>
+                  </div>
+                  <p class="text-xs text-slate-400 mt-1">
+                    25% of declared price (<span id="optionABaseFee">P2,000.00</span>) + Deferred Registration (<span id="optionADeferredFee">P50.00</span>).
+                  </p>
+                  <ul class="text-[11px] text-slate-300 mt-2 space-y-1">
+                    <li><i class="fa-solid fa-check text-emerald-400 mr-1"></i> Un-blur suspect face & legal KYC identity</li>
+                    <li><i class="fa-solid fa-check text-emerald-400 mr-1"></i> Intercepted active phone number & new SIM IMSI</li>
+                    <li><i class="fa-solid fa-check text-emerald-400 mr-1"></i> Download a clearly labeled demonstration report</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <!-- TIER OPTION B: DATA RECOVERY ONLY (P50.00) -->
+            <div onclick="selectPricingOption('data_recovery_only')" id="card-option-b" class="pricing-card border border-slate-700 bg-slate-950/60 rounded-xl p-4 cursor-pointer hover:border-slate-500 transition-all relative">
+              <div class="flex items-start space-x-3">
+                <div class="w-8 h-8 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center text-purple-400 mt-0.5">
+                  <i class="fa-solid fa-cloud-arrow-down"></i>
+                </div>
+                <div class="flex-1">
+                  <div class="flex items-baseline justify-between">
+                    <h3 class="text-sm font-bold text-white">Option B: Data Recovery Only</h3>
+                    <div class="text-right">
+                      <span class="text-lg font-extrabold text-purple-400" id="optionBTotalDisplay">BWP 100.00</span>
+                    </div>
+                  </div>
+                  <p class="text-xs text-slate-400 mt-1">
+                    Flat Recovery Fee (P50.00) + Deferred Registration (<span id="optionBDeferredFee">P50.00</span>).
+                  </p>
+                  <ul class="text-[11px] text-slate-300 mt-2 space-y-1">
+                    <li><i class="fa-solid fa-check text-purple-400 mr-1"></i> Demo pricing only; recovery is not implemented</li>
+                    <li><i class="fa-solid fa-check text-purple-400 mr-1"></i> No remote wipe is performed</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <!-- PAYMENT GATEWAY SELECTION (BOTSWANA MOBILE MONEY) -->
+            <div class="space-y-3 pt-2">
+              <label class="text-xs font-semibold text-slate-300 block">Select Botswana Payment Gateway</label>
+              <div class="grid grid-cols-3 gap-2">
+                <button type="button" onclick="selectPaymentMethod('Orange Money')" id="btn-pay-orange" class="pay-method-btn active-method p-2.5 rounded-lg border border-amber-600 bg-amber-950/40 text-xs font-semibold text-amber-300 flex flex-col items-center justify-center gap-1">
+                  <i class="fa-solid fa-wallet text-base"></i> Orange Money
+                </button>
+                <button type="button" onclick="selectPaymentMethod('MyZaka')" id="btn-pay-myzaka" class="pay-method-btn p-2.5 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-300 flex flex-col items-center justify-center gap-1">
+                  <i class="fa-solid fa-money-bill-transfer text-base"></i> MyZaka (Mascom)
+                </button>
+                <button type="button" onclick="selectPaymentMethod('Smega')" id="btn-pay-smega" class="pay-method-btn p-2.5 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-300 flex flex-col items-center justify-center gap-1">
+                  <i class="fa-solid fa-building-columns text-base"></i> Smega (BTC)
+                </button>
+              </div>
+
+              <!-- Action Checkout Button -->
+              <button onclick="executePaymentCheckout()" id="checkoutSubmitBtn" class="w-full py-3 px-4 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold rounded-xl shadow-lg shadow-cyan-600/30 transition-all flex items-center justify-center gap-2">
+                <i class="fa-solid fa-shield-halved"></i>
+                <span id="checkoutBtnLabel">Unlock Demo Dossier • BWP 2,050.00</span>
+              </button>
+            </div>
+
+          </div>
+
+          <!-- False Alarm Exit Shortcut for Owner -->
+          <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-4 flex items-center justify-between text-xs">
+            <div class="flex items-center space-x-2 text-slate-400">
+              <i class="fa-solid fa-key text-amber-400"></i>
+              <span>Accidental trigger or child lock?</span>
+            </div>
+            <button onclick="openMasterPinModal()" class="text-cyan-400 hover:text-cyan-300 font-semibold underline">
+              Owner Master Reset
+            </button>
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+
+    <!-- ========================================================================= -->
+    <!-- TAB 2: OPERATOR COMMAND CENTER -->
+    <!-- ========================================================================= -->
+    <section id="view-operator" class="tab-content hidden space-y-6">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-xl font-bold text-white">Central Operations Feed & Device Registry</h2>
+          <p class="text-xs text-slate-400">Review the selected case history before performing an authorized recovery action. Demo controls only.</p>
+        </div>
+        <button onclick="triggerSampleStolenEvent()" class="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-semibold flex items-center gap-2 shadow-lg shadow-rose-600/20">
+          <i class="fa-solid fa-bolt"></i> Simulate Stolen Ingress (Demo)
+        </button>
+      </div>
+
+      <!-- Real-Time Activity Feed -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="lg:col-span-8 bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+          <h3 class="text-sm font-bold text-white flex items-center gap-2">
+            <i class="fa-solid fa-tower-broadcast text-cyan-400"></i> Selected Case Telemetry Log
+          </h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs text-slate-300">
+              <thead class="bg-slate-950 text-slate-400 uppercase font-mono text-[10px]">
+                <tr>
+                  <th class="p-3">Time</th>
+                  <th class="p-3">Device</th>
+                  <th class="p-3">Trigger Event</th>
+                  <th class="p-3">New SIM / IMSI</th>
+                  <th class="p-3">Carrier / IP</th>
+                  <th class="p-3">Status</th>
+                  <th class="p-3">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="telemetryLogTable" class="divide-y divide-slate-800">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Operator Actions Panel -->
+        <div class="lg:col-span-4 bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
+          <h3 class="text-sm font-bold text-white flex items-center gap-2">
+            <i class="fa-solid fa-sliders text-amber-400"></i> Operator Quick Controls
+          </h3>
+
+          <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
+            <h4 class="text-xs font-bold text-slate-200">Dispatch Remote Reset Token</h4>
+            <p class="text-[11px] text-slate-400">Only issue a token after confirming the caller's identity through an approved support procedure.</p>
+            <label class="flex items-start gap-2 text-[11px] text-slate-300 cursor-pointer">
+              <input id="operatorIdentityVerified" type="checkbox" class="mt-0.5 h-3.5 w-3.5 accent-cyan-500" />
+              <span>I have verified the caller and am authorized to issue a single-use reset token.</span>
+            </label>
+            <div class="flex gap-2">
+              <input type="text" id="remoteTokenDisplay" readonly placeholder="Click Generate" class="w-full bg-slate-900 border border-slate-700 text-cyan-400 font-mono text-center text-sm rounded-lg p-2 font-bold" />
+              <button onclick="generateRemoteTokenForCurrentDevice()" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-medium whitespace-nowrap">
+                Generate
+              </button>
+            </div>
+          </div>
+
+          <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
+            <h4 class="text-xs font-bold text-slate-200">Case Handling Notice</h4>
+            <p class="text-[11px] text-slate-400">Operator access requires sign-in. This prototype does not validate legal authority. Do not use its demo data or generated documents as a substitute for a verified case record.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ========================================================================= -->
+    <!-- TAB 3: TECHNICIAN HUB DETECTOR (BSSID CLUSTERS) -->
+    <!-- ========================================================================= -->
+    <section id="view-technician" class="tab-content hidden space-y-6">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping"></span>
+              <h2 class="text-xl font-bold text-white">Demo Wi-Fi cluster analysis</h2>
+            </div>
+            <p class="text-xs text-slate-400 mt-1">
+              Groups simulated device events by shared Wi-Fi identifiers. A shared network does not establish wrongdoing.
+            </p>
+          </div>
+          <button onclick="loadTechnicianHubs()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium border border-slate-700 flex items-center gap-1.5">
+            <i class="fa-solid fa-arrows-rotate"></i> Refresh Hubs
+          </button>
+        </div>
+
+        <div id="technicianHubsList" class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ========================================================================= -->
+    <!-- TAB 4: RECEIPT OCR & OMANG VERIFIER -->
+    <!-- ========================================================================= -->
+    <section id="view-ocr" class="tab-content hidden space-y-6">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
+        <div>
+          
+          <h2 class="text-xl font-bold text-white">Register a device</h2>
+          <p class="text-xs text-slate-400 mt-1">
+            Enter your device details. Receipt and identity verification are not available in this prototype.
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="space-y-4 bg-slate-950 p-5 rounded-xl border border-slate-800">
+            <h3 class="text-sm font-bold text-white">Device details</h3>
+            
+            <div>
+              <label for="ocrUserIdSelect" class="text-xs text-slate-400 block mb-1">Device owner</label>
+              <select id="ocrUserIdSelect" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-slate-200">
+                <!-- Populated -->
+              </select>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label for="regBrand" class="text-xs text-slate-400 block mb-1">Device Brand</label>
+                <input type="text" id="regBrand" placeholder="e.g. Samsung" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-slate-200" />
+              </div>
+              <div>
+                <label for="regModel" class="text-xs text-slate-400 block mb-1">Device Model</label>
+                <input type="text" id="regModel" placeholder="e.g. Galaxy S24" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-slate-200" />
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label for="regHwId" class="text-xs text-slate-400 block mb-1">Hardware Identifier (IMEI/Serial)</label>
+                <input type="text" id="regHwId" placeholder="Your device IMEI or serial" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-slate-200 font-mono" />
+              </div>
+              <div>
+                <label for="regStoreName" class="text-xs text-slate-400 block mb-1">Store Name on Receipt</label>
+                <select id="regStoreName" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-slate-200">
+                  <option value="">Select a store (optional)</option>
+                  <option value="Mascom Wireless Store - Riverwalk">Mascom Wireless Store - Riverwalk</option>
+                  <option value="Orange Botswana Shop - Game City">Orange Botswana Shop - Game City</option>
+                  <option value="BTC Mobile - Main Mall">BTC Mobile - Main Mall</option>
+                  <option value="Incredible Connection - Gaborone">Incredible Connection - Gaborone</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              
+              <label for="regBackupPin">Choose a backup PIN (6-12 digits)</label><input type="password" id="regBackupPin" inputmode="numeric" minlength="6" maxlength="12" class="w-full bg-slate-900 border rounded p-2" autocomplete="new-password" />
+<label for="regPriceBwp" class="text-xs text-slate-400 block mb-1 mt-3">Purchase price (BWP)</label><input type="number" id="regPriceBwp" placeholder="e.g. 6000" min="0.01" step="0.01" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-slate-200 font-mono" />
+            </div>
+
+            <button onclick="submitNewDeviceWithReceipt()" class="w-full py-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-bold transition shadow-lg shadow-purple-600/30">
+              Register device
+            </button>
+          </div>
+
+          <!-- OCR Live Extraction Preview -->
+          <div class="bg-slate-950 p-5 rounded-xl border border-slate-800 space-y-4">
+            <h3 class="text-sm font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-brain text-purple-400"></i> Registration result
+            </h3>
+            <div id="ocrResultBox" class="text-xs space-y-2 text-slate-300">
+              <p class="text-slate-500 italic">Enter device details and choose a backup PIN to register.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ========================================================================= -->
+    <!-- TAB 5: HARDWARE HONEYPOT SIMULATOR (TrapPhon & TrapLap) -->
+    <!-- ========================================================================= -->
+    <section id="view-simulator" class="tab-content hidden space-y-6">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
+        <div>
+          
+          <h2 class="text-xl font-bold text-white">Live Hardware Honeypot Simulator</h2>
+          <p class="text-xs text-slate-400 mt-1">
+            Simulates both the smartphone (TrapPhon) Fake Factory Reset and the laptop (TrapLap) Captive Network Lockout.
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+
+          <!-- TRAPPHON SIMULATOR (MOBILE SCREEN) -->
+          <div class="flex flex-col items-center">
+            <h3 class="text-sm font-bold text-slate-300 mb-3 flex items-center gap-2">
+              <i class="fa-solid fa-mobile-screen text-cyan-400"></i> TrapPhon (Android Mobile Simulation)
+            </h3>
+
+            <!-- Smartphone Mockup -->
+            <div class="w-72 h-[480px] bg-black border-4 border-slate-700 rounded-[36px] shadow-2xl p-3 flex flex-col relative overflow-hidden">
+              
+              <!-- Screen Notch & Speaker -->
+              <div class="w-24 h-4 bg-slate-900 rounded-full mx-auto mb-2 flex items-center justify-center">
+                <div class="w-2 h-2 rounded-full bg-slate-800"></div>
+              </div>
+
+              <!-- PHONE SCREEN CONTENT -->
+              <div id="phoneScreen" class="flex-1 bg-slate-950 rounded-2xl p-3 flex flex-col justify-between text-center relative overflow-hidden transition-all">
+                
+                <!-- State 1: Normal Lockscreen -->
+                <div id="phoneNormalState" class="space-y-4 my-auto">
+                  <div class="text-xs text-slate-400 font-mono">16:42 CAT</div>
+                  <div class="text-3xl font-extralight text-white">16:42</div>
+                  <p class="text-[11px] text-slate-400">Swipe or enter PIN</p>
+                  
+                  <div class="space-y-2 pt-4">
+                    <input type="password" id="simPhonePinInput" placeholder="Enter PIN" maxlength="4" class="w-32 mx-auto text-center bg-slate-900 border border-slate-700 rounded p-1 text-sm text-white font-mono" />
+                    <div>
+                      <button onclick="simulatePhoneUnlockAttempt()" class="px-3 py-1 bg-cyan-600 text-white text-xs rounded hover:bg-cyan-500">
+                        Attempt Unlock
+                      </button>
+                    </div>
+                    <p class="text-[10px] text-rose-400" id="phoneFailedAttemptsText">Failed attempts: 0 / 3</p>
+                  </div>
+                </div>
+
+                <!-- State 2: Fake Factory Reset / Lockdown Screen -->
+                <div id="phoneHoneypotState" class="hidden space-y-3 my-auto p-2">
+                  <!-- Company Logo (Tap 5 times for Master Exit) -->
+                  <div onclick="recordLogoTap()" class="w-12 h-12 rounded-xl bg-gradient-to-tr from-cyan-600 to-blue-600 mx-auto flex items-center justify-center text-white cursor-pointer select-none active:scale-95 transition" title="Tap 5 times for Master Exit">
+                    <i class="fa-solid fa-shield-halved text-xl"></i>
+                  </div>
+                  <h4 class="text-xs font-bold text-rose-400 uppercase tracking-wider">Security Lockdown</h4>
+                  <p class="text-[10px] text-slate-300 leading-tight">
+                    Too many failed access attempts. Cellular network verification required. Please insert a valid SIM card to verify your identity.
+                  </p>
+
+                  <div class="bg-slate-900/90 border border-slate-800 rounded-lg p-2 text-[10px] text-slate-400 font-mono">
+                    Emergency Call Only<br/>
+                    Baseband Radio: ACTIVE
+                  </div>
+
+                  <p class="text-[9px] text-cyan-400/80 italic">Secret Exit: Tap company logo 5 times rapidly.</p>
+                </div>
+
+              </div>
+
+              <!-- SIM SLIDE CONTROL -->
+              <div class="mt-3 pt-2 border-t border-slate-800 flex justify-between items-center text-xs">
+                <span class="text-slate-400 text-[11px]">Hardware SIM Slot:</span>
+                <button onclick="simulateSimInsertion()" class="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded text-[11px] font-semibold">
+                  Insert New SIM
+                </button>
+              </div>
+
+            </div>
+          </div>
+
+
+          <!-- TRAPLAP SIMULATOR (LAPTOP SCREEN) -->
+          <div class="flex flex-col items-center">
+            <h3 class="text-sm font-bold text-slate-300 mb-3 flex items-center gap-2">
+              <i class="fa-solid fa-laptop text-purple-400"></i> TrapLap (Windows Laptop Simulation)
+            </h3>
+
+            <!-- Laptop Mockup -->
+            <div class="w-80 h-[480px] flex flex-col items-center">
+              
+              <!-- Laptop Bezel -->
+              <div class="w-full h-64 bg-slate-900 border-4 border-slate-700 rounded-t-xl p-2 relative flex flex-col justify-between shadow-2xl">
+                <!-- Webcam Dot -->
+                <div class="w-1.5 h-1.5 rounded-full bg-cyan-400 mx-auto" id="laptopWebcamLed" title="Webcam sensor"></div>
+
+                <!-- Screen Display -->
+                <div id="laptopScreen" class="flex-1 bg-slate-950 rounded border border-slate-800 p-3 flex flex-col justify-center text-center">
+                  <div id="laptopNormalState" class="space-y-2">
+                    <i class="fa-brands fa-windows text-blue-400 text-2xl"></i>
+                    <h4 class="text-xs font-bold text-white">Windows 11 Sign-in</h4>
+                    <input type="password" id="laptopPassInput" placeholder="Password" class="w-36 mx-auto text-center bg-slate-900 border border-slate-700 rounded p-1 text-xs text-white" />
+                    <div>
+                      <button onclick="simulateLaptopUnlockAttempt()" class="px-3 py-1 bg-blue-600 text-white text-[11px] rounded">
+                        Sign In
+                      </button>
+                    </div>
+                    <p class="text-[10px] text-rose-400" id="laptopAttemptsText">Failed logins: 0 / 3</p>
+                  </div>
+
+                  <!-- Captive Portal Lockout -->
+                  <div id="laptopCaptiveState" class="hidden space-y-2">
+                    <i class="fa-solid fa-wifi text-rose-400 text-xl animate-pulse"></i>
+                    <h4 class="text-xs font-bold text-rose-400 uppercase">Hardware Identity Lockout</h4>
+                    <p class="text-[9px] text-slate-300">
+                      System authentication suspended. Connect to local Wi-Fi to authenticate operating system license.
+                    </p>
+                    <button onclick="simulateLaptopWifiConnect()" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] rounded font-semibold">
+                      Connect to Wi-Fi Network
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Laptop Bottom Logo -->
+                <div class="text-[9px] text-slate-600 text-center font-mono">SYTECH SECURE BOOT ENGINE</div>
+              </div>
+
+              <!-- Laptop Keyboard Base -->
+              <div class="w-96 h-8 bg-slate-800 border-t-2 border-slate-600 rounded-b-xl shadow-lg flex items-center justify-center">
+                <div class="w-20 h-3 bg-slate-900 rounded"></div>
+              </div>
+
+              <!-- Simulation Controls -->
+              <div class="mt-4 bg-slate-950 p-3 rounded-xl border border-slate-800 text-xs w-full space-y-2">
+                <div class="text-slate-400 font-bold">Laptop Attack Simulation:</div>
+                <div class="flex gap-2">
+                  <button onclick="triggerLaptopBiosAttempt()" class="w-1/2 px-2 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px]">
+                    Simulate F12/BIOS Boot
+                  </button>
+                  <button onclick="triggerLaptopWebcamFlash()" class="w-1/2 px-2 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px]">
+                    Flash Front Camera
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+  </div>
+
+  <button onclick="openMasterPinModal()" class="fixed bottom-5 left-5 rounded-lg bg-slate-800 p-3 text-sm text-white" id="backupPinAction" hidden>Backup PIN / demo reset</button>
+
+  <!-- MODAL: MASTER BACKUP PIN VERIFICATION (FALSE ALARM EXIT) -->
+  <div id="masterPinModal" role="dialog" aria-modal="true" aria-label="Backup PIN and demo reset" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-amber-600 flex items-center justify-center text-white text-lg">
+          <i class="fa-solid fa-key"></i>
+        </div>
+        <div>
+          <h3 class="text-base font-bold text-white">Owner Master Exit</h3>
+          <p class="text-xs text-slate-400">Enter your Master Backup PIN</p>
+        </div>
+      </div>
+
+      <p class="text-xs text-slate-300">
+        This marks the demo device as secured and resets simulated counters. No real device operating system is changed.
+      </p>
+
+      <div>
+        <input type="password" id="masterPinInput" maxlength="12" inputmode="numeric" placeholder="Your backup PIN" class="w-full bg-slate-950 border border-slate-700 text-center text-xl tracking-widest text-cyan-400 font-mono rounded-xl p-3 focus:ring-2 focus:ring-cyan-500" />
+      </div>
+
+      <details class="text-sm text-slate-300">
+        <summary>Choose or change your backup PIN</summary>
+        <form id="changeBackupPinForm" class="space-y-3 mt-3" onsubmit="changeBackupPin(event)">
+          <label class="block">Account password<input id="pinAccountPassword" type="password" required autocomplete="current-password" class="block w-full rounded bg-slate-950 p-2" /></label>
+          <label class="block">New PIN (6–12 digits)<input id="replacementPin" type="password" required pattern="[0-9]{6,12}" inputmode="numeric" autocomplete="new-password" class="block w-full rounded bg-slate-950 p-2" /></label>
+          <button class="rounded bg-cyan-700 px-3 py-2">Save backup PIN</button>
+        </form>
+      </details>
+      <div class="flex gap-3">
+        <button onclick="closeMasterPinModal()" class="w-1/2 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg">
+          Cancel
+        </button>
+        <button onclick="submitMasterPin()" class="w-1/2 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-lg shadow-lg shadow-cyan-600/30">
+          Mark demo device as secured
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toastRegion" aria-live="polite" aria-atomic="true" class="pointer-events-none fixed bottom-5 right-5 z-[60] flex w-[min(24rem,calc(100vw-2.5rem))] flex-col gap-2"></div>
+
+  <div id="loginModal" class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/95 p-4">
+    <form id="loginForm" class="w-full max-w-sm space-y-4 rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
+      <div>
+        <p class="text-xs font-mono uppercase tracking-wider text-cyan-400">Secure access</p>
+        <h2 class="mt-1 text-xl font-bold text-white">Sign in to SYTECH</h2>
+        <p class="mt-2 text-xs text-slate-400">Your workspace is selected from your account role.</p>
+      </div>
+      <label class="block text-xs text-slate-300">Mobile contact<input id="loginContact" required autocomplete="username" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 p-2.5 text-sm text-white" placeholder="+267…" /></label>
+      <label class="block text-xs text-slate-300">Password<input id="loginPassword" type="password" required autocomplete="current-password" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 p-2.5 text-sm text-white" /></label>
+      <p id="loginError" class="hidden text-xs text-rose-400"></p>
+      <button class="w-full rounded-lg bg-cyan-600 py-2.5 text-sm font-bold text-white hover:bg-cyan-500">Sign in</button>
+    </form>
+  </div>
+
+  <dialog id="demoConfirmDialog" aria-labelledby="demoConfirmTitle" class="rounded-2xl border border-slate-700 bg-slate-900 p-6 text-slate-100 max-w-sm w-full">
+    <form method="dialog" class="space-y-4">
+      <h2 id="demoConfirmTitle" class="text-lg font-bold">Confirm demo action</h2>
+      <p id="demoConfirmMessage" class="text-sm text-slate-300"></p>
+      <div class="flex gap-3">
+        <button value="cancel" autofocus class="rounded-lg bg-slate-800 px-4 py-2">Cancel</button>
+        <button value="confirm" class="rounded-lg bg-cyan-600 px-4 py-2">Confirm</button>
+      </div>
+    </form>
+  </dialog>
+  <script src="app.js?v=review-6"></script>
+</body>
+</html>
+

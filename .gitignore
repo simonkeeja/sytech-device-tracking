@@ -1,0 +1,20 @@
+.venv/
+__pycache__/
+.pytest_cache/
+*.db
+*.db-shm
+*.db-wal
+backend/generated_affidavits/
+.env
+.test-tmp*/
+tmp/
+.env.*
+!.env.example
+*.sqlite
+*.sqlite3
+# Local backups / archives
+Back-up/
+*.zip
+
+# Internal project documents
+DeviceTrackerDocumentation.docx
