@@ -245,8 +245,31 @@ def register_device(req: DeviceRegisterRequest, user: Dict[str, Any] = Depends(s
 
 @app.get("/api/devices")
 def list_devices(user: Dict[str, Any] = Depends(security.current_user)):
-    devices = db.get_devices_for_user(user["user_id"]) if user["role"] == "customer" else db.get_all_devices()
-    return [public_device(device) for device in devices]
+    """Return the complete device registry visible to the signed-in account.
+
+    Customers only receive their own devices. Operators/admins receive every
+    registered device. Owner display fields are attached here so the dashboard
+    can render the registry without issuing one request per row.
+    """
+    devices = (
+        db.get_devices_for_user(user["user_id"])
+        if user["role"] == "customer"
+        else db.get_all_devices()
+    )
+
+    results = []
+    for raw_device in devices:
+        device = public_device(raw_device)
+        owner = db.get_user(device.get("user_id")) if device.get("user_id") else None
+        if owner:
+            device["full_name_omang"] = owner.get("full_name_omang")
+            device["owner_primary_contact"] = owner.get("primary_contact")
+        else:
+            device["full_name_omang"] = "Unknown owner"
+            device["owner_primary_contact"] = None
+        results.append(device)
+
+    return results
 
 @app.get("/api/devices/{device_id}")
 def get_device_details(device_id: int, user: Dict[str, Any] = Depends(security.current_user)):

@@ -121,6 +121,25 @@
     <!-- ========================================================================= -->
     <section id="view-paywall" class="tab-content space-y-6">
       
+      <!-- Registered Device Registry -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
+        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
+          <div>
+            <p class="text-[11px] font-mono uppercase tracking-wider text-cyan-400">Device registry</p>
+            <h2 class="text-lg font-bold text-white">All Registered Devices</h2>
+            <p id="deviceRegistrySummary" class="text-xs text-slate-400 mt-1">Loading registered devices…</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <input id="deviceRegistrySearch" type="search" oninput="filterDeviceRegistry(this.value)" placeholder="Search owner, model, IMEI or serial" class="w-full md:w-72 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:ring-2 focus:ring-cyan-500" />
+            <button onclick="loadInitialData()" class="px-3 py-2 rounded-lg bg-slate-800 text-slate-300 hover:text-white border border-slate-700 hover:bg-slate-700 transition text-xs whitespace-nowrap">
+              <i class="fa-solid fa-arrows-rotate mr-1"></i> Refresh
+            </button>
+          </div>
+        </div>
+        <div id="deviceRegistryEmpty" class="hidden rounded-xl border border-slate-800 bg-slate-950 p-6 text-center text-sm text-slate-500">No registered devices found.</div>
+        <div id="deviceRegistryGrid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3"></div>
+      </div>
+
       <!-- Device Selector & Banner -->
       <div class="bg-gradient-to-r from-slate-900 to-slate-800 border border-slate-700/80 rounded-2xl p-5 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -762,7 +781,7 @@
       </div>
     </form>
   </dialog>
-  <script src="app.js?v=review-6"></script>
+  <script src="app.js?v=device-registry-1"></script>
 </body>
 </html>
 
