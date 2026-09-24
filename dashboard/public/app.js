@@ -23,6 +23,7 @@ window.fetch = (input, init = {}) => {
   });
 };
 
+
 let currentDeviceId = null;
 let deviceCache = [];
 let previewRequest = 0;
@@ -32,18 +33,58 @@ let currentDevice = null;
 let selectedServiceTier = "full_intel_dossier";
 let selectedPaymentMethod = "Orange Money";
 
+
+/* ============================================================
+   WEBSOCKET STATE
+============================================================ */
+
 let ws = null;
+
+/*
+ * Only one reconnect timer may exist at a time.
+ * This prevents multiple closed sockets from each starting
+ * their own reconnect loop.
+ */
+let wsReconnectTimer = null;
+
+/*
+ * Number of consecutive reconnect attempts.
+ * Used to gradually increase the retry delay.
+ */
+let wsReconnectAttempts = 0;
+
+/*
+ * Set to true when we intentionally close the connection,
+ * for example during sign-out.
+ *
+ * When true, ws.onclose must NOT reconnect.
+ */
+let wsManualClose = false;
+
+/*
+ * Incremented whenever a new socket is created.
+ *
+ * Event callbacks belonging to an older socket can therefore
+ * detect that they are stale and do nothing.
+ */
+let wsGeneration = 0;
+
+const WS_BASE_RECONNECT_DELAY = 4000;
+const WS_MAX_RECONNECT_DELAY = 30000;
+
+
 let logoTapCount = 0;
 let logoTapTimer = null;
+
 
 // Simulator local states
 let phoneFailedAttempts = 0;
 let laptopFailedAttempts = 0;
 
 
-// ============================================================
-// INITIALIZATION
-// ============================================================
+/* ============================================================
+   INITIALIZATION
+============================================================ */
 
 document.addEventListener("DOMContentLoaded", () => {
   document
@@ -55,9 +96,9 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 
-// ============================================================
-// AUTHENTICATION
-// ============================================================
+/* ============================================================
+   AUTHENTICATION
+============================================================ */
 
 async function restoreSession() {
   if (!authToken) return;
@@ -74,8 +115,11 @@ async function restoreSession() {
     startAuthenticatedDashboard();
 
   } catch (_) {
+    stopWebSocket();
+
     localStorage.removeItem("sytech_access_token");
     authToken = null;
+    sessionUser = null;
   }
 }
 
@@ -103,7 +147,9 @@ async function submitLogin(event) {
               .trim(),
 
           password:
-            document.getElementById("loginPassword").value
+            document
+              .getElementById("loginPassword")
+              .value
         })
       }
     );
@@ -111,7 +157,10 @@ async function submitLogin(event) {
     const data = await res.json();
 
     if (!res.ok) {
-      throw new Error(data.detail || "Sign-in failed");
+      throw new Error(
+        data.detail ||
+        "Sign-in failed"
+      );
     }
 
     authToken = data.access_token;
@@ -122,6 +171,12 @@ async function submitLogin(event) {
     );
 
     sessionUser = data.user;
+
+    /*
+     * A fresh login starts a fresh WebSocket lifecycle.
+     */
+    wsManualClose = false;
+    wsReconnectAttempts = 0;
 
     startAuthenticatedDashboard();
 
@@ -134,6 +189,14 @@ async function submitLogin(event) {
 
 async function signOut() {
   try {
+    /*
+     * Stop WebSocket BEFORE invalidating authentication.
+     *
+     * This prevents the socket's close handler from starting
+     * another connection while the user is signing out.
+     */
+    stopWebSocket();
+
     const response = await fetch(
       `${API_BASE}/api/auth/logout`,
       {
@@ -145,7 +208,9 @@ async function signOut() {
       !response.ok &&
       response.status !== 401
     ) {
-      throw new Error("Sign-out failed");
+      throw new Error(
+        "Sign-out failed"
+      );
     }
 
     authToken = null;
@@ -155,13 +220,13 @@ async function signOut() {
       "sytech_access_token"
     );
 
-    if (ws) {
-      ws.close();
-    }
-
     window.location.reload();
 
   } catch (error) {
+    /*
+     * Even if the server-side logout request fails, keep the
+     * WebSocket stopped. The user can retry sign-out.
+     */
     notify(
       "Could not sign out. Please retry.",
       "error"
@@ -205,17 +270,24 @@ function startAuthenticatedDashboard() {
       );
     });
 
+  /*
+   * Operators/admins get the live event feed.
+   * Customers do not need a WebSocket.
+   */
   if (sessionUser.role !== "customer") {
+    wsManualClose = false;
     initWebSocket();
+  } else {
+    stopWebSocket();
   }
 
   loadInitialData();
 }
 
 
-// ============================================================
-// NOTIFICATIONS
-// ============================================================
+/* ============================================================
+   NOTIFICATIONS
+============================================================ */
 
 function notify(message, tone = "info") {
   const region =
@@ -247,9 +319,9 @@ function notify(message, tone = "info") {
 }
 
 
-// ============================================================
-// WORKFLOW
-// ============================================================
+/* ============================================================
+   WORKFLOW
+============================================================ */
 
 function setWorkflow(
   currentStep,
@@ -291,9 +363,9 @@ function setWorkflow(
 }
 
 
-// ============================================================
-// CASE HEADER
-// ============================================================
+/* ============================================================
+   CASE HEADER
+============================================================ */
 
 function updateCaseHeader(preview) {
   const device =
@@ -366,7 +438,7 @@ function updateCaseHeader(preview) {
 
   } else if (
     preview.status ===
-    "no_telemetry_yet"
+      "no_telemetry_yet"
   ) {
 
     badge.className =
@@ -402,9 +474,9 @@ function updateCaseHeader(preview) {
 }
 
 
-// ============================================================
-// LOGO GESTURE
-// ============================================================
+/* ============================================================
+   LOGO GESTURE
+============================================================ */
 
 function setupLogoGesture() {
   const logo =
@@ -442,14 +514,235 @@ function recordLogoTap() {
 }
 
 
-// ============================================================
-// WEBSOCKET
-// ============================================================
+/* ============================================================
+   WEBSOCKET
+============================================================ */
 
+/*
+ * Cancel any reconnect that is waiting to run.
+ */
+function clearWebSocketReconnectTimer() {
+  if (!wsReconnectTimer) {
+    return;
+  }
+
+  clearTimeout(
+    wsReconnectTimer
+  );
+
+  wsReconnectTimer = null;
+}
+
+
+/*
+ * Update the WebSocket indicator safely.
+ */
+function setWebSocketStatus(
+  state
+) {
+  const statusEl =
+    document.getElementById(
+      "wsStatus"
+    );
+
+  if (!statusEl) {
+    return;
+  }
+
+  if (state === "live") {
+    statusEl.innerHTML =
+      `<i class="fa-solid fa-wifi text-emerald-400"></i><span>SYSTEM LIVE</span>`;
+
+    return;
+  }
+
+  if (state === "connecting") {
+    statusEl.innerHTML =
+      `<i class="fa-solid fa-wifi text-amber-400"></i><span>CONNECTING</span>`;
+
+    return;
+  }
+
+  if (state === "reconnecting") {
+    statusEl.innerHTML =
+      `<i class="fa-solid fa-wifi text-amber-400"></i><span>RECONNECTING</span>`;
+
+    return;
+  }
+
+  if (state === "offline") {
+    statusEl.innerHTML =
+      `<i class="fa-solid fa-wifi text-rose-400"></i><span>LIVE FEED OFFLINE</span>`;
+
+    return;
+  }
+
+  statusEl.textContent =
+    sessionUser
+      ? "SIGNED IN"
+      : "OFFLINE";
+}
+
+
+/*
+ * Schedule exactly ONE reconnect.
+ *
+ * The old app.js allowed every closed socket to call
+ * setTimeout(initWebSocket, 4000). If several sockets existed,
+ * each one created another connection every four seconds.
+ *
+ * This function guarantees that only one retry timer can exist.
+ */
+function scheduleWebSocketReconnect() {
+  if (
+    wsManualClose ||
+    !authToken ||
+    !sessionUser ||
+    sessionUser.role === "customer"
+  ) {
+    return;
+  }
+
+  if (wsReconnectTimer) {
+    return;
+  }
+
+  /*
+   * Gradual backoff:
+   *
+   * 4 sec
+   * 8 sec
+   * 12 sec
+   * ...
+   * maximum 30 sec
+   */
+  const delay =
+    Math.min(
+      WS_BASE_RECONNECT_DELAY *
+        Math.max(
+          1,
+          wsReconnectAttempts + 1
+        ),
+      WS_MAX_RECONNECT_DELAY
+    );
+
+  setWebSocketStatus(
+    "reconnecting"
+  );
+
+  wsReconnectTimer =
+    window.setTimeout(
+      () => {
+        wsReconnectTimer = null;
+
+        if (
+          wsManualClose ||
+          !authToken ||
+          !sessionUser ||
+          sessionUser.role ===
+            "customer"
+        ) {
+          return;
+        }
+
+        initWebSocket();
+
+      },
+      delay
+    );
+}
+
+
+/*
+ * Explicitly stop the live feed.
+ *
+ * This is used during logout, expired sessions, and when a
+ * customer account does not require the operator feed.
+ */
+function stopWebSocket() {
+  wsManualClose = true;
+
+  clearWebSocketReconnectTimer();
+
+  /*
+   * Invalidates callbacks belonging to the previous socket.
+   */
+  wsGeneration++;
+
+  const socketToClose = ws;
+
+  ws = null;
+
+  if (
+    socketToClose &&
+    (
+      socketToClose.readyState ===
+        WebSocket.OPEN ||
+      socketToClose.readyState ===
+        WebSocket.CONNECTING
+    )
+  ) {
+    /*
+     * Remove handlers first so an intentional close cannot
+     * accidentally start another reconnect cycle.
+     */
+    socketToClose.onopen = null;
+    socketToClose.onmessage = null;
+    socketToClose.onerror = null;
+    socketToClose.onclose = null;
+
+    try {
+      socketToClose.close(
+        1000,
+        "Client closing connection"
+      );
+    } catch (_) {
+      // Socket was already closing/closed.
+    }
+  }
+
+  wsReconnectAttempts = 0;
+}
+
+
+/*
+ * Create the operator/admin WebSocket.
+ *
+ * IMPORTANT:
+ * There may only be one OPEN or CONNECTING socket.
+ */
 function initWebSocket() {
+  if (
+    !authToken ||
+    !sessionUser ||
+    sessionUser.role === "customer"
+  ) {
+    return;
+  }
+
+  /*
+   * If we already have a healthy or pending socket,
+   * DO NOT create another one.
+   */
+  if (
+    ws &&
+    (
+      ws.readyState ===
+        WebSocket.OPEN ||
+      ws.readyState ===
+        WebSocket.CONNECTING
+    )
+  ) {
+    return;
+  }
+
+  clearWebSocketReconnectTimer();
+
+  wsManualClose = false;
+
   const wsProto =
     window.location.protocol ===
-    "https:"
+      "https:"
       ? "wss:"
       : "ws:";
 
@@ -460,25 +753,74 @@ function initWebSocket() {
   const wsUrl =
     `${wsProto}//${wsHost}/ws/feed`;
 
+  /*
+   * Each socket gets a generation number.
+   *
+   * If an old socket later fires onclose/onerror after a newer
+   * connection exists, its callback is ignored.
+   */
+  const generation =
+    ++wsGeneration;
+
+  setWebSocketStatus(
+    "connecting"
+  );
+
   try {
-    ws =
-      new WebSocket(wsUrl);
+    const socket =
+      new WebSocket(
+        wsUrl
+      );
 
-    ws.onopen = () => {
-      ws.send(authToken);
+    ws = socket;
 
-      const statusEl =
-        document.getElementById(
-          "wsStatus"
-        );
 
-      if (statusEl) {
-        statusEl.innerHTML =
-          `<i class="fa-solid fa-wifi text-emerald-400"></i><span>SYSTEM LIVE</span>`;
+    socket.onopen = () => {
+      /*
+       * Ignore callbacks from an obsolete socket.
+       */
+      if (
+        generation !==
+          wsGeneration ||
+        ws !== socket
+      ) {
+        try {
+          socket.close();
+        } catch (_) {}
+
+        return;
       }
+
+      /*
+       * Authentication is the first WebSocket message expected
+       * by the FastAPI endpoint.
+       */
+      socket.send(
+        authToken
+      );
+
+      /*
+       * A successful connection resets the retry counter.
+       */
+      wsReconnectAttempts = 0;
+
+      clearWebSocketReconnectTimer();
+
+      setWebSocketStatus(
+        "live"
+      );
     };
 
-    ws.onmessage = event => {
+
+    socket.onmessage = event => {
+      if (
+        generation !==
+          wsGeneration ||
+        ws !== socket
+      ) {
+        return;
+      }
+
       try {
         const payload =
           JSON.parse(
@@ -497,28 +839,69 @@ function initWebSocket() {
       }
     };
 
-    ws.onclose = () => {
-      const statusEl =
-        document.getElementById(
-          "wsStatus"
-        );
 
-      if (statusEl) {
-        statusEl.innerHTML =
-          `<i class="fa-solid fa-wifi text-rose-400"></i><span>RECONNECTING</span>`;
+    socket.onerror = error => {
+      /*
+       * onclose will handle reconnection.
+       * Do NOT reconnect from both onerror and onclose.
+       */
+      if (
+        generation !==
+          wsGeneration ||
+        ws !== socket
+      ) {
+        return;
+      }
+
+      console.warn(
+        "WebSocket error",
+        error
+      );
+    };
+
+
+    socket.onclose = event => {
+      /*
+       * A stale socket must never control the active connection.
+       */
+      if (
+        generation !==
+          wsGeneration
+      ) {
+        return;
+      }
+
+      if (ws === socket) {
+        ws = null;
+      }
+
+      /*
+       * If we deliberately closed it, stop here.
+       */
+      if (wsManualClose) {
+        return;
       }
 
       if (
-        authToken &&
-        sessionUser &&
-        sessionUser.role !==
+        !authToken ||
+        !sessionUser ||
+        sessionUser.role ===
           "customer"
       ) {
-        setTimeout(
-          initWebSocket,
-          4000
+        setWebSocketStatus(
+          "offline"
         );
+
+        return;
       }
+
+      wsReconnectAttempts++;
+
+      console.warn(
+        `WebSocket closed (${event.code}). Reconnect attempt ${wsReconnectAttempts}.`
+      );
+
+      scheduleWebSocketReconnect();
     };
 
   } catch (err) {
@@ -526,6 +909,20 @@ function initWebSocket() {
       "WebSocket connection skipped or not supported:",
       err
     );
+
+    ws = null;
+
+    if (
+      !wsManualClose &&
+      authToken &&
+      sessionUser &&
+      sessionUser.role !==
+        "customer"
+    ) {
+      wsReconnectAttempts++;
+
+      scheduleWebSocketReconnect();
+    }
   }
 }
 
@@ -540,7 +937,7 @@ function handleIncomingWsEvent(
 
   if (
     eventData.event ===
-    "TELEMETRY_INGRESS"
+      "TELEMETRY_INGRESS"
   ) {
 
     if (
@@ -559,14 +956,14 @@ function handleIncomingWsEvent(
 
     if (
       sessionUser.role !==
-      "customer"
+        "customer"
     ) {
       loadTechnicianHubs();
     }
 
   } else if (
     eventData.event ===
-    "FALSE_ALARM_CLEARED"
+      "FALSE_ALARM_CLEARED"
   ) {
 
     if (
@@ -586,7 +983,7 @@ function handleIncomingWsEvent(
 
   } else if (
     eventData.event ===
-    "INVOICE_SETTLED"
+      "INVOICE_SETTLED"
   ) {
 
     if (
@@ -604,9 +1001,9 @@ function handleIncomingWsEvent(
 }
 
 
-// ============================================================
-// TAB SWITCHING
-// ============================================================
+/* ============================================================
+   TAB SWITCHING
+============================================================ */
 
 function switchTab(tabId) {
   document
@@ -656,7 +1053,7 @@ function switchTab(tabId) {
   ) {
     if (
       sessionUser.role !==
-      "customer"
+        "customer"
     ) {
       loadTechnicianHubs();
     }
@@ -670,9 +1067,9 @@ function switchTab(tabId) {
 }
 
 
-// ============================================================
-// REGISTERED DEVICE REGISTRY
-// ============================================================
+/* ============================================================
+   REGISTERED DEVICE REGISTRY
+============================================================ */
 
 function formatDeviceStatus(
   status
@@ -920,7 +1317,7 @@ function filterDeviceRegistry(
         ].some(
           value =>
             String(
-              value ?? ""
+              value == null ? "" : value
             )
               .toLowerCase()
               .includes(
@@ -969,12 +1366,9 @@ async function selectRegisteredDevice(
   await loadDevicePreview(
     currentDeviceId
   );
-}
-
-
-// ============================================================
-// INITIAL DEVICE LOADING
-// ============================================================
+}/* ============================================================
+   INITIAL DEVICE LOADING
+============================================================ */
 
 async function loadInitialData() {
   try {
@@ -1216,9 +1610,9 @@ function refreshCurrentDevice() {
 }
 
 
-// ============================================================
-// DEVICE PREVIEW
-// ============================================================
+/* ============================================================
+   DEVICE PREVIEW
+============================================================ */
 
 async function loadDevicePreview(
   deviceId
@@ -1468,9 +1862,9 @@ async function loadDevicePreview(
       "No verified face match";
 
 
-    // ========================================================
-    // SETTLED
-    // ========================================================
+    /* ========================================================
+       SETTLED
+    ======================================================== */
 
     if (data.is_settled) {
 
@@ -1640,9 +2034,9 @@ async function loadDevicePreview(
       );
 
 
-    // ========================================================
-    // NO TELEMETRY
-    // ========================================================
+    /* ========================================================
+       NO TELEMETRY
+    ======================================================== */
 
     } else if (
       data.status ===
@@ -1714,9 +2108,9 @@ async function loadDevicePreview(
       );
 
 
-    // ========================================================
-    // PAYWALL
-    // ========================================================
+    /* ========================================================
+       PAYWALL
+    ======================================================== */
 
     } else {
 
@@ -1836,9 +2230,9 @@ async function loadDevicePreview(
     );
 
 
-  // ==========================================================
-  // PREVIEW FALLBACK
-  // ==========================================================
+  /* ==========================================================
+     PREVIEW FALLBACK
+  ========================================================== */
 
   } catch (err) {
 
@@ -1962,9 +2356,9 @@ async function loadDevicePreview(
 }
 
 
-// ============================================================
-// PRICING
-// ============================================================
+/* ============================================================
+   PRICING
+============================================================ */
 
 function selectPricingOption(
   tier
@@ -2130,9 +2524,9 @@ function selectPaymentMethod(
 }
 
 
-// ============================================================
-// DEMO CONFIRMATION
-// ============================================================
+/* ============================================================
+   DEMO CONFIRMATION
+============================================================ */
 
 function confirmDemoAction(
   message
@@ -2177,9 +2571,9 @@ function confirmDemoAction(
 }
 
 
-// ============================================================
-// CHECKOUT
-// ============================================================
+/* ============================================================
+   CHECKOUT
+============================================================ */
 
 async function executePaymentCheckout() {
   const submitBtn =
@@ -2298,9 +2692,9 @@ async function executePaymentCheckout() {
 }
 
 
-// ============================================================
-// HTML ESCAPE
-// ============================================================
+/* ============================================================
+   HTML ESCAPE
+============================================================ */
 
 function escapeHtml(value) {
   const element =
@@ -2319,9 +2713,9 @@ function escapeHtml(value) {
 }
 
 
-// ============================================================
-// OPERATOR TELEMETRY
-// ============================================================
+/* ============================================================
+   OPERATOR TELEMETRY
+============================================================ */
 
 function appendTelemetryRow(
   data
@@ -2575,9 +2969,9 @@ async function loadOperatorCase() {
 }
 
 
-// ============================================================
-// TECHNICIAN HUBS
-// ============================================================
+/* ============================================================
+   TECHNICIAN HUBS
+============================================================ */
 
 async function loadTechnicianHubs() {
   try {
@@ -2719,9 +3113,9 @@ async function loadTechnicianHubs() {
 }
 
 
-// ============================================================
-// DEVICE REGISTRATION
-// ============================================================
+/* ============================================================
+   DEVICE REGISTRATION
+============================================================ */
 
 async function submitNewDeviceWithReceipt() {
 
@@ -2913,9 +3307,9 @@ async function submitNewDeviceWithReceipt() {
 }
 
 
-// ============================================================
-// MASTER BACKUP PIN
-// ============================================================
+/* ============================================================
+   MASTER BACKUP PIN
+============================================================ */
 
 function openMasterPinModal() {
 
@@ -3035,9 +3429,9 @@ async function submitMasterPin() {
 }
 
 
-// ============================================================
-// REMOTE TOKEN
-// ============================================================
+/* ============================================================
+   REMOTE TOKEN
+============================================================ */
 
 async function generateRemoteTokenForCurrentDevice() {
 
@@ -3128,9 +3522,9 @@ async function generateRemoteTokenForCurrentDevice() {
 }
 
 
-// ============================================================
-// SAMPLE DEMO TELEMETRY
-// ============================================================
+/* ============================================================
+   SAMPLE DEMO TELEMETRY
+============================================================ */
 
 async function triggerSampleStolenEvent() {
 
@@ -3228,9 +3622,9 @@ async function triggerSampleStolenEvent() {
 }
 
 
-// ============================================================
-// TRAPPHON SIMULATOR
-// ============================================================
+/* ============================================================
+   TRAPPHON SIMULATOR
+============================================================ */
 
 function simulatePhoneUnlockAttempt() {
 
@@ -3410,9 +3804,9 @@ function resetPhoneSimulator() {
 }
 
 
-// ============================================================
-// TRAPLAP SIMULATOR
-// ============================================================
+/* ============================================================
+   TRAPLAP SIMULATOR
+============================================================ */
 
 function simulateLaptopUnlockAttempt() {
 
@@ -3610,9 +4004,9 @@ function resetLaptopSimulator() {
 }
 
 
-// ============================================================
-// CHANGE BACKUP PIN
-// ============================================================
+/* ============================================================
+   CHANGE BACKUP PIN
+============================================================ */
 
 async function changeBackupPin(
   event
